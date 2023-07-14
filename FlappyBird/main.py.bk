@@ -1,0 +1,269 @@
+import pygame, sys, random
+from bird import Bird
+from database import *
+from constants import *
+from coins import Coins
+
+def main_run():
+
+	global name
+	
+	crear_tabla()
+
+	def dibujo_piso():
+		screen.blit(floor_surface, (floor_x_position, 900))
+		screen.blit(floor_surface, (floor_x_position + 576, 900))
+
+	def creo_tuberia():
+		random_pipe_position = random.choice(pipe_height)
+		bottom_pipe = pipe_surface.get_rect(midtop=(700, random_pipe_position))
+		top_pipe = pipe_surface.get_rect(midbottom=(700, random_pipe_position-300))
+		return bottom_pipe, top_pipe
+
+	def muevo_tuberia(pipes):
+		for pipe in pipes:
+			pipe.centerx -= 5
+		return pipes
+
+	def dibujo_tuberia(pipes):
+		for pipe in pipes:
+			if pipe.bottom >= 1024:
+				screen.blit(pipe_surface, pipe)
+			else:
+				flip_pipe = pygame.transform.flip(pipe_surface, False, True)
+				screen.blit(flip_pipe, pipe)
+
+	def verifico_colision(pipes):
+		for pipe in pipes:
+			if bird.bird_rectangle.colliderect(pipe):
+				death_sound.play()
+				return False
+
+		if bird.bird_rectangle.top <= -100 or bird.bird_rectangle.bottom >= 900:
+			return False
+
+		return True
+
+	def mostrar_puntuacion(game_state):
+		if game_state == 'main_game':
+			score_surface_text = game_font.render('Score:', True, (255, 255, 255))
+			score_surface = game_font.render(str(int(score)), True, (255, 255, 255))
+
+			score_rectangle_text = score_surface_text.get_rect(center=(190, 100))
+			score_rectangle = score_surface.get_rect(center=(288, 100))
+
+			screen.blit(score_surface_text, score_rectangle_text)
+			screen.blit(score_surface, score_rectangle)
+
+			time_surface_text = game_font.render('Time:', True, (255, 255, 255))
+			time_surface = game_font.render(str(elapsed_time), True, (255, 255, 255))
+
+			time_rectangle_text = time_surface_text.get_rect(center=(190, 150))
+			time_rectangle = time_surface.get_rect(center=(288, 150))
+
+			screen.blit(time_surface_text, time_rectangle_text)
+			screen.blit(time_surface, time_rectangle)
+
+		if game_state == 'game_over':
+			score_surface = game_font.render(f'Score: {int(score)}', True, (255, 255, 255))
+			score_rectangle = score_surface.get_rect(center=(288, 100))
+			screen.blit(score_surface, score_rectangle)
+
+			high_score_surface = game_font.render(f'High Score: {int(high_score)}', True, (255, 255, 255))
+			high_score_rectangle = high_score_surface.get_rect(center=(288, 150))
+			screen.blit(high_score_surface, high_score_rectangle)
+
+			name_surface = game_font.render(f'Name: {str(name)}', True, (255, 255, 255))
+			name_rectangle = name_surface.get_rect(center=(288, 200))
+			screen.blit(name_surface, name_rectangle)
+
+	def actualizar_puntuacion(score, high_score):
+		if score > high_score:
+			high_score = score
+			get_name()
+			guardo_score(name, score)
+		return high_score
+
+	def get_name():
+		"""
+		Permite al jugador ingresar su nombre después de haber obtenido un nuevo récord.
+		"""
+		global name
+		input_box = pygame.Rect(150, 400, 300, 40)
+		name = ""
+		is_typing = True
+
+		while is_typing:
+			for event in pygame.event.get():
+				if event.type == pygame.QUIT:
+					pygame.quit()
+					quit()
+				elif event.type == pygame.KEYDOWN:
+					if event.key == pygame.K_RETURN:
+						is_typing = False
+					elif event.key == pygame.K_BACKSPACE:
+						name = name[:-1]
+					else:
+						name += event.unicode
+
+			screen.fill(BLACK)
+
+			# Configuración de la fuente y el tamaño del texto
+			script_dir = os.path.dirname(os.path.abspath(__file__))
+			font_path = os.path.join(script_dir, "assets", "04B_19.TTF")
+			font_name = font_path
+			font_size = 30
+			font_size_dos = 12
+			font = pygame.font.Font(font_name, font_size)
+			font_dos = pygame.font.Font(font_name, font_size_dos)
+
+			# Obtener el ancho y alto del texto
+			text_width, text_height = font.size("New Record!")
+
+			# Calcular las coordenadas para centrar el texto y la entrada de texto
+			text_x = (WIDTH - text_width) // 2
+			text_y = (HEIGHT - text_height) // 2 - 50
+
+			input_box_x = (WIDTH - input_box.width) // 2
+			input_box_y = (HEIGHT - input_box.height) // 2 + 50
+
+			text = font.render("NEW RECORD!", True, WHITE)
+			screen.blit(text, (text_x, text_y))
+
+			text_surface = font_dos.render(name, True, WHITE)
+			text_width = text_surface.get_width()  # Obtener el ancho del texto ingresado
+			screen.blit(text_surface, (input_box_x + (input_box.width - text_width) // 2, input_box_y))  # Centrar el texto ingresado
+
+			# Agrega una nueva línea de texto debajo de "NEW RECORD!"
+			new_line_text = font_dos.render("↓ Ingresa tu nombre ↓", True, DARK_GRAY)
+			new_line_text_x = (WIDTH - new_line_text.get_width()) // 2
+			new_line_text_y = text_y + text_height + 20
+			screen.blit(new_line_text, (new_line_text_x, new_line_text_y))
+
+			pygame.display.flip()
+			clock.tick(30)
+
+	# funciones para iniciar el juego
+	pygame.mixer.pre_init(frequency=44100, size=16, channels=1, buffer=512)
+	pygame.init()
+	screen = pygame.display.set_mode((WIDTH, HEIGHT))
+	clock = pygame.time.Clock()
+	game_font = pygame.font.Font(font_dir, 40)
+
+	# variables del juego
+	gravity = 0.25
+	bird_movement = 0
+	game_active = True
+	score = 0
+	high_score = 0
+	name = nombre_puntaje_mas_alto()
+	elapsed_time = 0
+	# Obtengo el puntaje guardado en la base de datos
+	if verifico_tabla_existente():
+		high_score = obtengo_puntaje_mas_alto()
+		
+	background_surface = pygame.image.load(background_dir).convert()
+	background_surface = pygame.transform.scale2x(background_surface) #transforma a escala la imagen cargada.
+
+	floor_surface = pygame.image.load(base_dir).convert()
+	floor_surface = pygame.transform.scale2x(floor_surface)
+	floor_x_position = 0
+
+	bird = Bird(100, 512)
+
+	coin_size = 30  # Tamaño de la moneda en píxeles
+	coins = [] 
+
+	COIN_SPAWN = pygame.USEREVENT + 2
+	pygame.time.set_timer(COIN_SPAWN, 3000)
+	BIRDFLAP = pygame.USEREVENT + 1
+	pygame.time.set_timer(BIRDFLAP, 200)
+
+	pipe_surface = pygame.image.load(pipe_dir)
+	pipe_surface = pygame.transform.scale2x(pipe_surface)
+	pipe_list = []
+	SPAWNPIPE = pygame.USEREVENT
+	pygame.time.set_timer(SPAWNPIPE, 1200)  # se desencadena el evento en 1.2 segundos
+	pipe_height = [400, 600, 800]
+
+	game_over_surface = pygame.transform.scale2x(pygame.image.load(message_dir).convert_alpha())
+	game_over_rectangle = game_over_surface.get_rect(center=(288, 512))
+
+	flap_sound = pygame.mixer.Sound(flap_sound_dir)
+	death_sound = pygame.mixer.Sound(death_sound_dir)
+	score_sound = pygame.mixer.Sound(score_sound_dir)
+
+	start_time = pygame.time.get_ticks()
+	
+	while True:
+		for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				pygame.quit()
+				sys.exit()
+
+			if event.type == pygame.KEYDOWN:
+				if event.key == pygame.K_SPACE and game_active:
+					bird_movement = 0
+					bird_movement -= 8  # velocidad del aleteo
+					flap_sound.play()
+
+				if event.key == pygame.K_SPACE and game_active == False:
+					game_active = True
+					pipe_list.clear()
+					coins.clear()
+					bird = Bird(100, 512)
+					bird_movement = 0
+					score = 0
+
+			if event.type == SPAWNPIPE:
+				pipe_list.extend(creo_tuberia())
+
+			if event.type == BIRDFLAP:
+				bird.animacion()
+			
+			if event.type == COIN_SPAWN:
+				coins.append(Coins(coin_size, pipe_list, coins))
+
+		screen.blit(background_surface, (0, 0))
+
+		if game_active:
+			bird_movement += gravity
+			bird.rotacion(-bird_movement * 3)
+			bird.movimiento(bird_movement)
+			bird.dibujo(screen)
+			game_active = verifico_colision(pipe_list)
+
+			# tuberias
+			pipe_list = muevo_tuberia(pipe_list)
+			dibujo_tuberia(pipe_list)
+
+			# coins
+			for coin in coins:
+				coin.move()
+				coin.draw(screen)
+				
+				if coin.check_collision(bird.bird_rectangle):
+					score += 10
+					coins.remove(coin)
+					score_sound.play()
+
+			score += 0.01
+			mostrar_puntuacion('main_game')
+			
+			current_time = pygame.time.get_ticks()
+			elapsed_time = (current_time - start_time) // 1000
+
+
+		else:
+			screen.blit(game_over_surface, game_over_rectangle)
+			high_score = actualizar_puntuacion(score, high_score)
+			mostrar_puntuacion('game_over')
+			start_time = pygame.time.get_ticks()
+
+		floor_x_position -= 1
+		dibujo_piso()
+		if floor_x_position <= -576:
+			floor_x_position = 0
+
+		pygame.display.update()
+		clock.tick(120)
